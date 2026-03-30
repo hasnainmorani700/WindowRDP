@@ -3,94 +3,29 @@ name: Window 10
 on: [push, workflow_dispatch]
 
 jobs:
-  build:aname: Window 10
-
-on: [push, workflow_dispatch]
-
-jobs:
   build:
     runs-on: windows-latest
     timeout-minutes: 9999
 
     steps:
     - name: Download ngrok
-      run: Invoke-WebRequest https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip -OutFile ngrok.zip
+      run: |
+        Invoke-WebRequest https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip -OutFile ngrok.zip
+        Expand-Archive ngrok.zip -Force
     
-    - name: Extract ngrok
-      run: Expand-Archive ngrok.zip -Force
-    
-    - name: Auth ngrok
+    - name: Authenticate ngrok
       run: .\ngrok.exe config add-authtoken $Env:NGROK_AUTH_TOKEN
       env:
         NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
     
-    - name: Enable Remote Desktop
+    - name: Verify authentication
+      run: .\ngrok.exe config view
+    
+    - name: Enable RDP
       run: |
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SecurityLayer" -Value 1
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+        Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString "@cyb3rking" -AsPlainText -Force)
     
-    - name: Configure Firewall
-      run: |
-        netsh advfirewall firewall add rule name="RDP 3389" dir=in action=allow protocol=TCP localport=3389
-        netsh advfirewall set allprofiles state off
-    
-    - name: Setup User
-      run: |
-        $password = ConvertTo-SecureString "@cyb3rking" -AsPlainText -Force
-        Set-LocalUser -Name "runneradmin" -Password $password -PasswordNeverExpires $true
-        Add-LocalGroupMember -Group "Remote Desktop Users" -Member "runneradmin"
-        Add-LocalGroupMember -Group "Administrators" -Member "runneradmin"
-    
-    - name: Restart RDP Service
-      run: Restart-Service TermService -Force
-    
-    - name: Wait for service
-      run: Start-Sleep -Seconds 5
-    
-    - name: Test RDP locally
-      run: |
-        Test-NetConnection -ComputerName localhost -Port 3389
-        netstat -an | findstr :3389
-    
-    - name: Create Tunnel
-      run: .\ngrok.exe tcp 3389 --log stdout --region us
-
-    runs-on: windows-latest
-    timeout-minutes: 9999
-
-    steps:
-    - name: Download latest ngrok
-      run: |
-        $ngrokUrl = "https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip"
-        Invoke-WebRequest $ngrokUrl -OutFile ngrok.zip
-        if (Test-Path ngrok.zip) {
-          Write-Host "Download successful"
-        } else {
-          Write-Host "Download failed"
-          exit 1
-        }
-    
-    - name: Extract ngrok
-      run: Expand-Archive -Path ngrok.zip -DestinationPath . -Force
-    
-    - name: Check ngrok version
-      run: .\ngrok.exe version
-    
-    - name: Auth
-      run: .\ngrok.exe config add-authtoken $Env:NGROK_AUTH_TOKEN
-      env:
-        NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
-    
-    - name: Enable Remote Desktop
-      run: |
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -Value 0
-        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 1
-    
-    - name: Set user password
-      run: Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "@cyb3rking" -Force)
-    
-    - name: Create Tunnel
+    - name: Start ngrok tunnel
       run: .\ngrok.exe tcp 3389 --log stdout
