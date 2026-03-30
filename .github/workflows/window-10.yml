@@ -1,11 +1,12 @@
-name: Windows 10 RDP via ngrok
+name: Windows RDP via ngrok (Stable)
 
-on: [push, workflow_dispatch]
+on:
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 360  # reduce from 9999 (GitHub may kill long jobs)
+    timeout-minutes: 360
 
     steps:
     - name: Download ngrok
@@ -19,20 +20,27 @@ jobs:
       env:
         NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
 
-    - name: Verify authentication
-      run: .\ngrok.exe config view
-
-    - name: Enable RDP
+    - name: Enable RDP + Set Password
       run: |
+        # Enable RDP
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-        
-        # Set a dynamic password instead of hardcoded
-        $password = "P@ssw0rd$(Get-Random)"
-        Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString $password -AsPlainText -Force)
 
-        echo "RDP Username: runneradmin"
-        echo "RDP Password: $password"
+        # Set strong password (reliable method)
+        net user runneradmin Str0ng!Pass1234
+
+        echo "=============================="
+        echo "RDP LOGIN DETAILS"
+        echo "Username: runneradmin"
+        echo "Password: Str0ng!Pass1234"
+        echo "=============================="
+
+    - name: Ensure RDP is ready
+      run: |
+        Write-Host "Waiting for RDP to be ready..."
+        Start-Sleep -Seconds 20
 
     - name: Start ngrok tunnel
-      run: .\ngrok.exe tcp 3389 --log stdout
+      run: |
+        Write-Host "Starting ngrok..."
+        .\ngrok.exe tcp 3389 --log stdout
